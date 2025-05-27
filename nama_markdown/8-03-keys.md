@@ -1,0 +1,1494 @@
+# 44. キー：主キー、外部キー、候補キー
+
+## はじめに
+
+前章では正規化について学習し、データの冗長性を削除する方法を理解しました。正規化の過程で頻繁に登場したのが「**キー**」という概念です。
+
+キーは、データベースにおいて**データの一意性を保証し、テーブル間の関係を定義する**重要な役割を果たします。適切なキー設計により、データの整合性が保たれ、効率的なデータ操作が可能になります。
+
+> **用語解説**：
+> - **キー（Key）**：テーブル内の行を識別したり、テーブル間の関係を定義したりするための属性（列）または属性の組み合わせです
+> - **一意性（Uniqueness）**：同じ値が重複して存在しないことです
+> - **識別子（Identifier）**：レコードを他と区別するために使用される値です
+> - **制約（Constraint）**：データベースに格納されるデータに対するルールや条件です
+> - **参照整合性（Referential Integrity）**：外部キーによって関連付けられたテーブル間でデータの整合性が保たれている状態です
+> - **複合キー（Composite Key）**：複数の列を組み合わせて作られるキーです
+> - **代理キー（Surrogate Key）**：業務的な意味を持たない、システムが自動生成するキーです
+> - **自然キー（Natural Key）**：業務的な意味を持つ、実際のデータから構成されるキーです
+
+この章では、学校システムを例に、キーの種類と特徴、設計における注意点を実践的に学習します。
+
+## キーの種類と基本概念
+
+### 1. スーパーキー（Super Key）
+
+**スーパーキー**とは、テーブル内の行を一意に識別できる属性（または属性の組み合わせ）です。
+
+学校システムの学生テーブルを例に考えてみましょう：
+
+```sql
+CREATE TABLE students (
+    student_id BIGINT,
+    student_name VARCHAR(64),
+    email VARCHAR(100),
+    phone VARCHAR(20),
+    admission_date DATE
+);
+
+-- サンプルデータ
+INSERT INTO students VALUES
+(301, '田中太郎', 'tanaka@example.com', '090-1234-5678', '2023-04-01'),
+(302, '山田花子', 'yamada@example.com', '080-9876-5432', '2023-04-01'),
+(303, '佐藤次郎', 'sato@example.com', '070-1111-2222', '2024-04-01');
+```
+
+このテーブルでのスーパーキーの例：
+- `student_id`（学生IDは一意）
+- `email`（メールアドレスは一意）
+- `(student_id, student_name)`（学生IDが一意なので、組み合わせも一意）
+- `(student_id, email)`（どちらも一意なので、組み合わせも一意）
+- `(student_id, student_name, email)`（すべての組み合わせ）
+
+### 2. 候補キー（Candidate Key）
+
+**候補キー**とは、スーパーキーの中で**最小限の属性で構成される**ものです。つまり、どの属性を除いても一意性が保てなくなるキーです。
+
+上記の学生テーブルでの候補キー：
+- `student_id`（これだけで一意、除けるものがない）
+- `email`（これだけで一意、除けるものがない）
+
+候補キーではないもの：
+- `(student_id, student_name)`（student_nameを除いてもstudent_idだけで一意）
+- `(student_id, email)`（どちらかを除いても一意性が保てる）
+
+### 3. 主キー（Primary Key）
+
+**主キー**とは、候補キーの中から**1つだけ選ばれた**、そのテーブルの代表的なキーです。
+
+```sql
+-- 主キーの設定例
+CREATE TABLE students (
+    student_id BIGINT PRIMARY KEY,  -- 主キーとして選択
+    student_name VARCHAR(64),
+    email VARCHAR(100) UNIQUE,      -- 候補キーだが、主キーではない
+    phone VARCHAR(20),
+    admission_date DATE
+);
+```
+
+**主キーの特徴**：
+- **NOT NULL**：主キーにはNULL値を格納できません
+- **UNIQUE**：主キーの値は一意でなければなりません
+- **不変性**：主キーの値は変更しないことが推奨されます
+- **テーブルごとに1つ**：1つのテーブルには1つの主キーのみ設定できます
+
+### 4. 代替キー（Alternate Key）
+
+**代替キー**とは、主キーに選ばれなかった候補キーのことです。
+
+上記の例では：
+- **主キー**：`student_id`
+- **代替キー**：`email`
+
+```sql
+-- 代替キーにはUNIQUE制約を設定
+CREATE TABLE students (
+    student_id BIGINT PRIMARY KEY,
+    student_name VARCHAR(64),
+    email VARCHAR(100) UNIQUE,  -- 代替キー（UNIQUE制約）
+    phone VARCHAR(20),
+    admission_date DATE
+);
+```
+
+### 5. 外部キー（Foreign Key）
+
+**外部キー**とは、他のテーブルの主キーを参照する属性です。テーブル間の関係を表現し、参照整合性を保証します。
+
+```sql
+-- 講座テーブル
+CREATE TABLE courses (
+    course_id VARCHAR(16) PRIMARY KEY,
+    course_name VARCHAR(128) NOT NULL,
+    teacher_id BIGINT NOT NULL  -- 外部キー（teachersテーブルを参照予定）
+);
+
+-- 教師テーブル
+CREATE TABLE teachers (
+    teacher_id BIGINT PRIMARY KEY,
+    teacher_name VARCHAR(64) NOT NULL
+);
+
+-- 外部キー制約の追加
+ALTER TABLE courses
+ADD CONSTRAINT fk_courses_teacher
+FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id);
+```
+
+## 主キーの詳細
+
+### 主キーの設計原則
+
+#### 1. **単純性（Simplicity）**
+可能な限り単一の列で構成する：
+
+```sql
+-- Good: 単一列の主キー
+CREATE TABLE students (
+    student_id BIGINT PRIMARY KEY,
+    student_name VARCHAR(64)
+);
+
+-- 避けるべき: 不必要に複雑な複合主キー
+CREATE TABLE students_bad (
+    student_name VARCHAR(64),
+    admission_date DATE,
+    phone VARCHAR(20),
+    PRIMARY KEY (student_name, admission_date, phone)  -- 複雑すぎる
+);
+```
+
+#### 2. **安定性（Stability）**
+主キーの値は変更されないことが理想：
+
+```sql
+-- Good: 学生IDは変更されない
+CREATE TABLE students (
+    student_id BIGINT PRIMARY KEY,  -- 安定
+    student_name VARCHAR(64)        -- 名前は変更される可能性がある
+);
+
+-- 問題あり: 名前を主キーにすると変更時に問題
+CREATE TABLE students_bad (
+    student_name VARCHAR(64) PRIMARY KEY,  -- 結婚等で変更される可能性
+    email VARCHAR(100)
+);
+```
+
+#### 3. **意味の有無**
+
+##### 自然キー（Natural Key）
+業務的な意味を持つキー：
+
+```sql
+-- 自然キーの例：学籍番号
+CREATE TABLE students (
+    student_number VARCHAR(20) PRIMARY KEY,  -- 2025001, 2025002...
+    student_name VARCHAR(64)
+);
+```
+
+**利点**：
+- 業務上の意味があり、理解しやすい
+- レポート等で直接使用できる
+
+**欠点**：
+- 番号体系の変更時に影響が大きい
+- 複雑な番号体系の場合、パフォーマンスが劣る場合がある
+
+##### 代理キー（Surrogate Key）
+業務的な意味を持たない、システム生成のキー：
+
+```sql
+-- 代理キーの例：自動増分ID
+CREATE TABLE students (
+    student_id BIGINT AUTO_INCREMENT PRIMARY KEY,  -- システム生成
+    student_number VARCHAR(20) UNIQUE,             -- 業務上のキーは別途管理
+    student_name VARCHAR(64)
+);
+```
+
+**利点**：
+- 安定性が高い（変更されない）
+- パフォーマンスが良い（整数型）
+- システム間の連携が容易
+
+**欠点**：
+- 業務的な意味がない
+- 別途業務キーの管理が必要
+
+### 複合主キー（Composite Primary Key）
+
+複数の列を組み合わせて主キーとする場合：
+
+```sql
+-- 学生受講テーブル：学生と講座の組み合わせが主キー
+CREATE TABLE student_courses (
+    student_id BIGINT,
+    course_id VARCHAR(16),
+    enrollment_date DATE DEFAULT CURRENT_DATE,
+    
+    PRIMARY KEY (student_id, course_id),  -- 複合主キー
+    FOREIGN KEY (student_id) REFERENCES students(student_id),
+    FOREIGN KEY (course_id) REFERENCES courses(course_id)
+);
+```
+
+**複合主キーの注意点**：
+- 各列は単独ではNULLを許可する場合でも、複合主キーとしてはNULLは不可
+- インデックスのサイズが大きくなる傾向
+- 外部キーとして参照される場合、参照側も複合外部キーが必要
+
+### 主キーの実装パターン
+
+#### パターン1: AUTO_INCREMENT を使用
+
+```sql
+CREATE TABLE students (
+    student_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    student_name VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- データ挿入時はIDを指定しない
+INSERT INTO students (student_name) VALUES ('田中太郎');
+INSERT INTO students (student_name) VALUES ('山田花子');
+
+-- 結果確認
+SELECT * FROM students;
+-- student_id | student_name | created_at
+-- 1          | 田中太郎     | 2025-05-27 10:00:00
+-- 2          | 山田花子     | 2025-05-27 10:00:01
+```
+
+#### パターン2: UUID を使用
+
+```sql
+CREATE TABLE students (
+    student_id CHAR(36) PRIMARY KEY,  -- UUID用
+    student_name VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- UUID の生成（MySQL 8.0以降）
+INSERT INTO students (student_id, student_name) 
+VALUES (UUID(), '田中太郎');
+
+INSERT INTO students (student_id, student_name) 
+VALUES (UUID(), '山田花子');
+
+-- 結果確認
+SELECT * FROM students;
+-- student_id                           | student_name | created_at
+-- 12345678-1234-1234-1234-123456789abc | 田中太郎     | 2025-05-27 10:00:00
+-- 87654321-4321-4321-4321-cba987654321 | 山田花子     | 2025-05-27 10:00:01
+```
+
+**UUIDの利点**：
+- グローバルに一意
+- 分散システムで有効
+- セキュリティ面で推測されにくい
+
+**UUIDの欠点**：
+- ストレージサイズが大きい
+- 人間には読みにくい
+- インデックスの断片化が起きやすい
+
+## 外部キーの詳細
+
+### 外部キー制約の基本
+
+```sql
+-- 親テーブル（参照される側）
+CREATE TABLE teachers (
+    teacher_id BIGINT PRIMARY KEY,
+    teacher_name VARCHAR(64) NOT NULL,
+    department VARCHAR(64)
+);
+
+-- 子テーブル（参照する側）
+CREATE TABLE courses (
+    course_id VARCHAR(16) PRIMARY KEY,
+    course_name VARCHAR(128) NOT NULL,
+    teacher_id BIGINT,  -- 外部キー
+    
+    CONSTRAINT fk_courses_teacher 
+    FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id)
+);
+```
+
+### 参照整合性の動作
+
+#### 1. INSERT 時の制約
+
+```sql
+-- 教師データの挿入
+INSERT INTO teachers VALUES (101, '佐藤先生', '情報学部');
+
+-- OK: 存在する教師を参照
+INSERT INTO courses VALUES ('1', 'プログラミング基礎', 101);
+
+-- ERROR: 存在しない教師を参照
+INSERT INTO courses VALUES ('2', 'データベース', 999);
+-- ERROR 1452: Cannot add or update a child row: a foreign key constraint fails
+```
+
+#### 2. UPDATE 時の制約
+
+```sql
+-- ERROR: 存在しない教師IDに変更しようとする
+UPDATE courses SET teacher_id = 999 WHERE course_id = '1';
+-- ERROR 1452: Cannot add or update a child row: a foreign key constraint fails
+
+-- OK: 存在する教師IDに変更
+INSERT INTO teachers VALUES (102, '鈴木先生', '数学科');
+UPDATE courses SET teacher_id = 102 WHERE course_id = '1';
+```
+
+#### 3. DELETE 時の制約
+
+```sql
+-- ERROR: 参照されている教師を削除しようとする
+DELETE FROM teachers WHERE teacher_id = 102;
+-- ERROR 1451: Cannot delete or update a parent row: a foreign key constraint fails
+```
+
+### 外部キー制約のオプション
+
+#### ON DELETE / ON UPDATE オプション
+
+```sql
+CREATE TABLE courses (
+    course_id VARCHAR(16) PRIMARY KEY,
+    course_name VARCHAR(128) NOT NULL,
+    teacher_id BIGINT,
+    
+    CONSTRAINT fk_courses_teacher 
+    FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id)
+    ON DELETE CASCADE    -- 教師削除時、講座も削除
+    ON UPDATE CASCADE    -- 教師ID変更時、講座も更新
+);
+```
+
+**オプションの種類**：
+
+##### CASCADE
+親の削除/更新時に、子も削除/更新：
+
+```sql
+-- CASCADE の例
+CREATE TABLE student_courses (
+    student_id BIGINT,
+    course_id VARCHAR(16),
+    PRIMARY KEY (student_id, course_id),
+    
+    FOREIGN KEY (student_id) REFERENCES students(student_id)
+    ON DELETE CASCADE,  -- 学生削除時、受講記録も削除
+    
+    FOREIGN KEY (course_id) REFERENCES courses(course_id)
+    ON DELETE CASCADE   -- 講座削除時、受講記録も削除
+);
+
+-- 学生を削除すると、その学生の受講記録もすべて削除される
+DELETE FROM students WHERE student_id = 301;
+```
+
+##### SET NULL
+親の削除/更新時に、子の外部キーをNULLに設定：
+
+```sql
+CREATE TABLE courses (
+    course_id VARCHAR(16) PRIMARY KEY,
+    course_name VARCHAR(128) NOT NULL,
+    teacher_id BIGINT,  -- NULLを許可
+    
+    FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id)
+    ON DELETE SET NULL  -- 教師削除時、teacher_idをNULLに
+);
+
+-- 教師を削除すると、その教師の講座のteacher_idがNULLになる
+DELETE FROM teachers WHERE teacher_id = 101;
+```
+
+##### RESTRICT / NO ACTION
+親の削除/更新を拒否（デフォルト）：
+
+```sql
+CREATE TABLE courses (
+    course_id VARCHAR(16) PRIMARY KEY,
+    course_name VARCHAR(128) NOT NULL,
+    teacher_id BIGINT NOT NULL,
+    
+    FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id)
+    ON DELETE RESTRICT  -- 明示的にRESTRICTを指定
+);
+```
+
+##### SET DEFAULT
+親の削除/更新時に、子の外部キーをデフォルト値に設定：
+
+```sql
+CREATE TABLE courses (
+    course_id VARCHAR(16) PRIMARY KEY,
+    course_name VARCHAR(128) NOT NULL,
+    teacher_id BIGINT DEFAULT 0,  -- デフォルト値を設定
+    
+    FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id)
+    ON DELETE SET DEFAULT
+);
+```
+
+### 複合外部キー
+
+```sql
+-- 親テーブル：複合主キー
+CREATE TABLE course_schedules (
+    course_id VARCHAR(16),
+    schedule_date DATE,
+    period INT,
+    classroom_id VARCHAR(16),
+    
+    PRIMARY KEY (course_id, schedule_date, period)
+);
+
+-- 子テーブル：複合外部キー
+CREATE TABLE attendance (
+    student_id BIGINT,
+    course_id VARCHAR(16),
+    schedule_date DATE,
+    period INT,
+    status ENUM('present', 'absent', 'late'),
+    
+    PRIMARY KEY (student_id, course_id, schedule_date, period),
+    
+    -- 複合外部キー
+    FOREIGN KEY (course_id, schedule_date, period) 
+    REFERENCES course_schedules(course_id, schedule_date, period)
+);
+```
+
+## キー設計のベストプラクティス
+
+### 1. 主キー設計の指針
+
+#### 業務要件による選択
+
+```sql
+-- ケース1: 学生管理（安定性重視）
+CREATE TABLE students (
+    student_id BIGINT AUTO_INCREMENT PRIMARY KEY,  -- 代理キー
+    student_number VARCHAR(20) UNIQUE NOT NULL,    -- 自然キー（別途管理）
+    student_name VARCHAR(64) NOT NULL
+);
+
+-- ケース2: ログテーブル（パフォーマンス重視）
+CREATE TABLE access_logs (
+    log_id BIGINT AUTO_INCREMENT PRIMARY KEY,  -- 代理キー（高速）
+    user_id BIGINT NOT NULL,
+    access_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    url VARCHAR(500)
+);
+
+-- ケース3: 関連テーブル（関係性明示）
+CREATE TABLE student_courses (
+    student_id BIGINT,
+    course_id VARCHAR(16),
+    enrollment_date DATE DEFAULT CURRENT_DATE,
+    
+    PRIMARY KEY (student_id, course_id),  -- 複合主キー（関係性を表現）
+    FOREIGN KEY (student_id) REFERENCES students(student_id),
+    FOREIGN KEY (course_id) REFERENCES courses(course_id)
+);
+```
+
+### 2. 外部キー設計の指針
+
+#### 適切な参照動作の選択
+
+```sql
+-- マスターデータ：RESTRICT（厳格な整合性）
+CREATE TABLE courses (
+    course_id VARCHAR(16) PRIMARY KEY,
+    course_name VARCHAR(128) NOT NULL,
+    teacher_id BIGINT NOT NULL,
+    
+    FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id)
+    ON DELETE RESTRICT  -- 教師は簡単に削除させない
+);
+
+-- トランザクションデータ：CASCADE（自動削除）
+CREATE TABLE enrollments (
+    student_id BIGINT,
+    course_id VARCHAR(16),
+    enrollment_date DATE,
+    
+    PRIMARY KEY (student_id, course_id),
+    FOREIGN KEY (student_id) REFERENCES students(student_id)
+    ON DELETE CASCADE,  -- 学生削除時、履修記録も削除
+    FOREIGN KEY (course_id) REFERENCES courses(course_id)
+    ON DELETE CASCADE   -- 講座削除時、履修記録も削除
+);
+
+-- 履歴データ：SET NULL（関連保持）
+CREATE TABLE grade_history (
+    history_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    student_id BIGINT,
+    course_id VARCHAR(16),
+    teacher_id BIGINT,  -- 履歴なので教師削除後もNULLで保持
+    grade CHAR(1),
+    graded_date DATE,
+    
+    FOREIGN KEY (student_id) REFERENCES students(student_id)
+    ON DELETE SET NULL,  -- 学生削除後も履歴は残す
+    FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id)
+    ON DELETE SET NULL   -- 教師削除後も履歴は残す
+);
+```
+
+### 3. パフォーマンス考慮
+
+#### インデックスの自動作成
+
+```sql
+-- 主キーには自動的にインデックスが作成される
+CREATE TABLE students (
+    student_id BIGINT PRIMARY KEY,  -- 自動的にインデックス作成
+    student_name VARCHAR(64)
+);
+
+-- 外部キーにも明示的にインデックスを作成することを推奨
+CREATE TABLE courses (
+    course_id VARCHAR(16) PRIMARY KEY,
+    course_name VARCHAR(128),
+    teacher_id BIGINT,
+    
+    FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id),
+    INDEX idx_teacher_id (teacher_id)  -- 外部キー用インデックス
+);
+```
+
+#### 大量データでの考慮事項
+
+```sql
+-- 大量データのテーブルでは、主キーの型に注意
+CREATE TABLE access_logs (
+    -- BIGINT を使用（INTは約21億まで）
+    log_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    access_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    INDEX idx_user_time (user_id, access_time)  -- 複合インデックス
+);
+```
+
+## 学校システムでの実践例
+
+### 完全なキー設計例
+
+```sql
+-- 1. 基本マスターテーブル
+
+-- 学生テーブル
+CREATE TABLE students (
+    student_id BIGINT AUTO_INCREMENT PRIMARY KEY,      -- 代理キー
+    student_number VARCHAR(20) UNIQUE NOT NULL,        -- 自然キー
+    student_name VARCHAR(64) NOT NULL,
+    email VARCHAR(100) UNIQUE,                         -- 代替キー
+    phone VARCHAR(20),
+    admission_date DATE NOT NULL,
+    
+    INDEX idx_student_number (student_number),
+    INDEX idx_email (email)
+);
+
+-- 教師テーブル
+CREATE TABLE teachers (
+    teacher_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    teacher_code VARCHAR(20) UNIQUE NOT NULL,
+    teacher_name VARCHAR(64) NOT NULL,
+    department VARCHAR(64),
+    email VARCHAR(100) UNIQUE,
+    
+    INDEX idx_teacher_code (teacher_code)
+);
+
+-- 講座テーブル
+CREATE TABLE courses (
+    course_id VARCHAR(16) PRIMARY KEY,                 -- 自然キー
+    course_name VARCHAR(128) NOT NULL,
+    teacher_id BIGINT NOT NULL,
+    credits INT DEFAULT 1,
+    
+    FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id)
+    ON DELETE RESTRICT,                                -- 教師削除防止
+    
+    INDEX idx_teacher_id (teacher_id)
+);
+
+-- 2. 関連テーブル
+
+-- 学生受講テーブル（多対多の解決）
+CREATE TABLE enrollments (
+    student_id BIGINT,
+    course_id VARCHAR(16),
+    enrollment_date DATE DEFAULT CURRENT_DATE,
+    status ENUM('active', 'dropped', 'completed') DEFAULT 'active',
+    
+    PRIMARY KEY (student_id, course_id),              -- 複合主キー
+    
+    FOREIGN KEY (student_id) REFERENCES students(student_id)
+    ON DELETE CASCADE,                                -- 学生削除時、履修も削除
+    
+    FOREIGN KEY (course_id) REFERENCES courses(course_id)
+    ON DELETE CASCADE,                                -- 講座削除時、履修も削除
+    
+    INDEX idx_enrollment_date (enrollment_date)
+);
+
+-- 成績テーブル
+CREATE TABLE grades (
+    grade_id BIGINT AUTO_INCREMENT PRIMARY KEY,       -- 代理キー
+    student_id BIGINT NOT NULL,
+    course_id VARCHAR(16) NOT NULL,
+    grade_type VARCHAR(32) NOT NULL,
+    score DECIMAL(5,2) NOT NULL,
+    max_score DECIMAL(5,2) NOT NULL,
+    submission_date DATE DEFAULT CURRENT_DATE,
+    
+    -- 複合ユニーク制約（同じ学生の同じ講座の同じ種別は1つだけ）
+    UNIQUE KEY uk_student_course_type (student_id, course_id, grade_type),
+    
+    FOREIGN KEY (student_id) REFERENCES students(student_id)
+    ON DELETE CASCADE,
+    
+    FOREIGN KEY (course_id) REFERENCES courses(course_id)
+    ON DELETE CASCADE,
+    
+    -- 外部キーと複合キーの確認制約
+    FOREIGN KEY (student_id, course_id) REFERENCES enrollments(student_id, course_id)
+    ON DELETE CASCADE,
+    
+    INDEX idx_submission_date (submission_date),
+    INDEX idx_student_course (student_id, course_id)
+);
+
+-- 3. ログ/履歴テーブル
+
+-- アクセスログテーブル
+CREATE TABLE user_access_logs (
+    log_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_type ENUM('student', 'teacher', 'admin') NOT NULL,
+    user_id BIGINT,                                   -- NULLを許可（削除された場合）
+    access_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    action VARCHAR(100),
+    ip_address VARCHAR(45),
+    
+    INDEX idx_user_time (user_type, user_id, access_time),
+    INDEX idx_access_time (access_time)
+);
+
+-- 成績変更履歴テーブル
+CREATE TABLE grade_change_history (
+    history_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    grade_id BIGINT,                                  -- NULLを許可（削除された場合）
+    student_id BIGINT,
+    course_id VARCHAR(16),
+    old_score DECIMAL(5,2),
+    new_score DECIMAL(5,2),
+    changed_by BIGINT,
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    reason TEXT,
+    
+    FOREIGN KEY (grade_id) REFERENCES grades(grade_id)
+    ON DELETE SET NULL,                               -- 成績削除後も履歴は保持
+    
+    FOREIGN KEY (changed_by) REFERENCES teachers(teacher_id)
+    ON DELETE SET NULL,                               -- 教師削除後も履歴は保持
+    
+    INDEX idx_grade_changed_at (grade_id, changed_at),
+    INDEX idx_student_changed_at (student_id, changed_at)
+);
+```
+
+### キー制約の確認方法
+
+```sql
+-- 主キー制約の確認
+SELECT 
+    TABLE_NAME,
+    COLUMN_NAME,
+    CONSTRAINT_NAME
+FROM information_schema.KEY_COLUMN_USAGE
+WHERE TABLE_SCHEMA = 'school_db'
+AND CONSTRAINT_NAME = 'PRIMARY'
+ORDER BY TABLE_NAME;
+
+-- 外部キー制約の確認
+SELECT 
+    TABLE_NAME,
+    COLUMN_NAME,
+    CONSTRAINT_NAME,
+    REFERENCED_TABLE_NAME,
+    REFERENCED_COLUMN_NAME,
+    DELETE_RULE,
+    UPDATE_RULE
+FROM information_schema.KEY_COLUMN_USAGE
+WHERE TABLE_SCHEMA = 'school_db'
+AND REFERENCED_TABLE_NAME IS NOT NULL
+ORDER BY TABLE_NAME, CONSTRAINT_NAME;
+
+-- UNIQUE制約の確認
+SELECT 
+    TABLE_NAME,
+    COLUMN_NAME,
+    CONSTRAINT_NAME
+FROM information_schema.KEY_COLUMN_USAGE
+WHERE TABLE_SCHEMA = 'school_db'
+AND CONSTRAINT_NAME LIKE 'UK_%'
+ORDER BY TABLE_NAME;
+```
+
+## 練習問題
+
+### 問題44-1：キーの識別と分類
+
+以下のテーブルを分析して、各種キーを識別してください：
+
+```sql
+CREATE TABLE employees (
+    emp_id INT AUTO_INCREMENT,
+    emp_code VARCHAR(20),
+    emp_name VARCHAR(100),
+    email VARCHAR(150),
+    phone VARCHAR(20),
+    department_id INT,
+    hire_date DATE,
+    
+    PRIMARY KEY (emp_id),
+    UNIQUE KEY uk_emp_code (emp_code),
+    UNIQUE KEY uk_email (email),
+    KEY idx_department (department_id)
+);
+```
+
+**質問**：
+1. 主キーは何ですか？
+2. 候補キーをすべて挙げてください
+3. 代替キーは何ですか？
+4. このテーブルに外部キーはありますか？あるとすれば何ですか？
+5. スーパーキーの例を3つ挙げてください
+
+### 問題44-2：主キー設計の選択
+
+オンラインショップの商品テーブルを設計しています。以下の2つの設計案のメリット・デメリットを分析してください：
+
+**案1：自然キー使用**
+```sql
+CREATE TABLE products_v1 (
+    product_code VARCHAR(20) PRIMARY KEY,  -- PRD-2025-001 形式
+    product_name VARCHAR(200) NOT NULL,
+    category_id INT NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    stock_quantity INT DEFAULT 0
+);
+```
+
+**案2：代理キー使用**
+```sql
+CREATE TABLE products_v2 (
+    product_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    product_code VARCHAR(20) UNIQUE NOT NULL,
+    product_name VARCHAR(200) NOT NULL,
+    category_id INT NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    stock_quantity INT DEFAULT 0
+);
+```
+
+**課題**：
+1. 各案のメリット・デメリットを3つずつ挙げてください
+2. どちらの設計を推奨しますか？理由も説明してください
+3. 注文詳細テーブルで商品を参照する場合、どちらが良いか考察してください
+
+### 問題44-3：外部キー制約の設計
+
+図書館システムで以下の要件があります。適切な外部キー制約を設計してください：
+
+**要件**：
+- 利用者が削除された場合、その利用者の貸出履歴は残したい（統計のため）
+- 本が削除された場合、その本の貸出履歴も削除したい
+- 著者が削除された場合、その著者の本は削除したくない（著者情報をNULLにしたい）
+- カテゴリが削除された場合、そのカテゴリの本の削除は拒否したい
+
+**現在のテーブル構造**：
+```sql
+CREATE TABLE users (
+    user_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE authors (
+    author_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    author_name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE categories (
+    category_id INT AUTO_INCREMENT PRIMARY KEY,
+    category_name VARCHAR(50) NOT NULL
+);
+
+CREATE TABLE books (
+    book_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    author_id BIGINT,
+    category_id INT NOT NULL
+);
+
+CREATE TABLE rentals (
+    rental_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT,
+    book_id BIGINT NOT NULL,
+    rental_date DATE NOT NULL,
+    return_date DATE
+);
+```
+
+**課題**：
+1. 各テーブルに適切な外部キー制約を追加してください
+2. ON DELETE/ON UPDATE オプションを適切に設定してください
+3. 設計の妥当性を検証するテストケースを作成してください
+
+### 問題44-4：複合キーの設計
+
+大学の時間割システムで、以下の要件を満たすテーブル設計を行ってください：
+
+**要件**：
+- 同じ教室の同じ時間帯には1つの授業のみ
+- 同じ教員の同じ時間帯には1つの授業のみ
+- 授業は「科目」「教員」「教室」「時間帯」の組み合わせで一意
+- 学生は複数の授業を履修できる
+- 同じ学生が同じ時間帯に複数の授業を履修することはできない
+
+**課題**：
+1. 必要なテーブルを設計してください
+2. 適切な主キーと外部キーを設定してください
+3. 複合キーが必要な場所を特定し、実装してください
+4. 制約違反を防ぐためのUNIQUE制約を設計してください
+5. テストデータを作成し、制約が正しく動作することを確認してください
+
+### 問題44-5：キー制約の改善
+
+以下の既存システムには設計上の問題があります。問題点を特定し、改善案を提示してください：
+
+```sql
+-- 既存の問題のあるテーブル設計
+CREATE TABLE student_grades (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_name VARCHAR(100),
+    student_email VARCHAR(150),
+    course_name VARCHAR(200),
+    teacher_name VARCHAR(100),
+    grade_type VARCHAR(50),
+    score DECIMAL(5,2),
+    submission_date DATE
+);
+
+-- サンプルデータ
+INSERT INTO student_grades VALUES
+(1, '田中太郎', 'tanaka@example.com', 'プログラミング基礎', '佐藤先生', 'テスト', 85.0, '2025-05-15'),
+(2, '田中太郎', 'tanaka@example.com', 'プログラミング基礎', '佐藤先生', 'レポート', 90.0, '2025-05-20'),
+(3, '山田花子', 'yamada@example.com', 'データベース', '鈴木先生', 'テスト', 92.0, '2025-05-15'),
+(4, '田中太郎', 'tanaka@example.com', 'データベース', '鈴木先生', 'テスト', 78.0, '2025-05-18');
+```
+
+**課題**：
+1. 現在の設計の問題点を5つ以上指摘してください
+2. 正規化とキー設計の観点から改善されたテーブル構造を提案してください
+3. データ移行用のSQLを作成してください
+4. 改善後の設計で同じデータを取得するクエリを書いてください
+
+### 問題44-6：実践的なキー設計
+
+ECサイトのシステム設計を行います。以下の要件を満たすキー設計を行ってください：
+
+**業務要件**：
+- 顧客は複数の住所を登録できる（配送先として）
+- 商品には SKU（Stock Keeping Unit）コードがある
+- 注文は複数の商品を含むことができる
+- 注文には配送先住所が必要
+- 支払い方法は複数登録できる
+- 在庫は商品ごとに管理する
+- 注文履歴は永続的に保持する
+- 商品レビューシステムがある
+
+**技術要件**：
+- 高いパフォーマンスが求められる
+- 将来的にシャーディング（分散）を検討
+- データ整合性は重要
+- 外部システムとの連携がある
+
+**課題**：
+1. 必要なテーブルをすべて洗い出してください
+2. 各テーブルの主キー設計（自然キー vs 代理キー）を検討してください
+3. テーブル間の関係と外部キー制約を設計してください
+4. パフォーマンスを考慮したインデックス設計を行ってください
+5. 将来のシャーディングを考慮したキー設計のポイントを説明してください
+
+## 解答
+
+### 解答44-1
+
+1. **主キー**：`emp_id`
+2. **候補キー**：
+   - `emp_id`（主キー）
+   - `emp_code`（UNIQUE制約）
+   - `email`（UNIQUE制約）
+3. **代替キー**：
+   - `emp_code`
+   - `email`
+4. **外部キー**：`department_id`（参照先テーブルが明示されていないが、インデックスが設定されていることから外部キーと推測）
+5. **スーパーキーの例**：
+   - `emp_id`
+   - `emp_code`
+   - `email`
+   - `(emp_id, emp_name)`
+   - `(emp_code, hire_date)`
+   - `(email, phone)`
+
+### 解答44-2
+
+1. **各案のメリット・デメリット**：
+
+**案1（自然キー）のメリット**：
+- 業務的な意味があり、理解しやすい
+- レポートや画面で直接表示できる
+- 外部システムとの連携時に意味がある
+
+**案1（自然キー）のデメリット**：
+- 商品コード体系変更時の影響が大きい
+- 文字列型のため、整数型よりパフォーマンスが劣る
+- 長いキーのため、外部キーとして参照される際のオーバーヘッド
+
+**案2（代理キー）のメリット**：
+- 高いパフォーマンス（整数型、AUTO_INCREMENT）
+- 安定性（変更されない）
+- 外部キー参照時の効率性
+
+**案2（代理キー）のデメリット**：
+- 業務的な意味がない
+- 商品コードでの結合時に追加の処理が必要
+- システム間の連携時に商品コードでの照合が必要
+
+2. **推奨設計**：案2（代理キー使用）を推奨
+
+**理由**：
+- ECサイトでは大量の商品データとトランザクションが発生するため、パフォーマンスが重要
+- 商品コードは業務上重要だが、UNIQUE制約で一意性を保証し、検索インデックスで効率性を確保
+- 将来的な商品コード体系の変更に柔軟に対応可能
+
+3. **注文詳細テーブルでの参照**：
+
+```sql
+-- 案2の方が効率的
+CREATE TABLE order_items (
+    order_id BIGINT,
+    product_id BIGINT,  -- 整数型で高速
+    quantity INT,
+    unit_price DECIMAL(10,2),
+    
+    PRIMARY KEY (order_id, product_id),
+    FOREIGN KEY (product_id) REFERENCES products_v2(product_id)
+);
+
+-- 商品コードでの検索も可能
+SELECT oi.*, p.product_code, p.product_name
+FROM order_items oi
+JOIN products_v2 p ON oi.product_id = p.product_id
+WHERE p.product_code = 'PRD-2025-001';
+```
+
+### 解答44-3
+
+1. **適切な外部キー制約**：
+
+```sql
+-- 本テーブル
+ALTER TABLE books
+ADD CONSTRAINT fk_books_author 
+FOREIGN KEY (author_id) REFERENCES authors(author_id)
+ON DELETE SET NULL      -- 著者削除時はNULLに
+ON UPDATE CASCADE,
+
+ADD CONSTRAINT fk_books_category
+FOREIGN KEY (category_id) REFERENCES categories(category_id)
+ON DELETE RESTRICT      -- カテゴリ削除は拒否
+ON UPDATE CASCADE;
+
+-- 貸出テーブル
+ALTER TABLE rentals
+ADD CONSTRAINT fk_rentals_user
+FOREIGN KEY (user_id) REFERENCES users(user_id)
+ON DELETE SET NULL      -- 利用者削除時はNULLに（履歴保持）
+ON UPDATE CASCADE,
+
+ADD CONSTRAINT fk_rentals_book
+FOREIGN KEY (book_id) REFERENCES books(book_id)
+ON DELETE CASCADE       -- 本削除時は貸出履歴も削除
+ON UPDATE CASCADE;
+```
+
+2. **テストケース**：
+
+```sql
+-- テストデータの準備
+INSERT INTO categories VALUES (1, 'プログラミング'), (2, '文学');
+INSERT INTO authors VALUES (1, '山田太郎'), (2, '佐藤花子');
+INSERT INTO users VALUES (1, '田中一郎'), (2, '鈴木次郎');
+INSERT INTO books VALUES (1, 'SQL入門', 1, 1), (2, '小説集', 2, 2);
+INSERT INTO rentals VALUES (1, 1, 1, '2025-05-01', '2025-05-15');
+
+-- テスト1: 著者削除（SET NULL の確認）
+DELETE FROM authors WHERE author_id = 1;
+SELECT * FROM books WHERE book_id = 1;  -- author_id が NULL になる
+
+-- テスト2: カテゴリ削除の拒否（RESTRICT の確認）
+DELETE FROM categories WHERE category_id = 1;  -- エラーが発生すべき
+
+-- テスト3: 利用者削除（履歴保持の確認）
+DELETE FROM users WHERE user_id = 1;
+SELECT * FROM rentals WHERE rental_id = 1;  -- user_id が NULL になるが履歴は残る
+
+-- テスト4: 本削除（CASCADE の確認）
+DELETE FROM books WHERE book_id = 1;
+SELECT * FROM rentals WHERE book_id = 1;  -- 貸出履歴も削除される
+```
+
+### 解答44-4
+
+1. **テーブル設計**：
+
+```sql
+-- 科目テーブル
+CREATE TABLE subjects (
+    subject_id VARCHAR(16) PRIMARY KEY,
+    subject_name VARCHAR(128) NOT NULL,
+    credits INT DEFAULT 1
+);
+
+-- 教員テーブル
+CREATE TABLE instructors (
+    instructor_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    instructor_name VARCHAR(100) NOT NULL,
+    department VARCHAR(64)
+);
+
+-- 教室テーブル
+CREATE TABLE classrooms (
+    classroom_id VARCHAR(16) PRIMARY KEY,
+    classroom_name VARCHAR(64) NOT NULL,
+    capacity INT NOT NULL
+);
+
+-- 時間帯テーブル
+CREATE TABLE time_slots (
+    slot_id INT AUTO_INCREMENT PRIMARY KEY,
+    day_of_week ENUM('Monday','Tuesday','Wednesday','Thursday','Friday') NOT NULL,
+    period INT NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    
+    UNIQUE KEY uk_day_period (day_of_week, period)
+);
+
+-- 学生テーブル
+CREATE TABLE students (
+    student_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    student_name VARCHAR(100) NOT NULL,
+    student_number VARCHAR(20) UNIQUE NOT NULL
+);
+```
+
+2. **授業テーブル（複合キーと制約）**：
+
+```sql
+-- 授業テーブル
+CREATE TABLE classes (
+    class_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    subject_id VARCHAR(16) NOT NULL,
+    instructor_id BIGINT NOT NULL,
+    classroom_id VARCHAR(16) NOT NULL,
+    slot_id INT NOT NULL,
+    academic_year YEAR NOT NULL,
+    semester ENUM('spring', 'fall') NOT NULL,
+    
+    -- 外部キー制約
+    FOREIGN KEY (subject_id) REFERENCES subjects(subject_id),
+    FOREIGN KEY (instructor_id) REFERENCES instructors(instructor_id),
+    FOREIGN KEY (classroom_id) REFERENCES classrooms(classroom_id),
+    FOREIGN KEY (slot_id) REFERENCES time_slots(slot_id),
+    
+    -- 重複防止のための制約
+    UNIQUE KEY uk_classroom_time (classroom_id, slot_id, academic_year, semester),
+    UNIQUE KEY uk_instructor_time (instructor_id, slot_id, academic_year, semester),
+    UNIQUE KEY uk_subject_instructor_time (subject_id, instructor_id, classroom_id, slot_id, academic_year, semester)
+);
+
+-- 履修テーブル
+CREATE TABLE enrollments (
+    student_id BIGINT,
+    class_id BIGINT,
+    enrollment_date DATE DEFAULT CURRENT_DATE,
+    
+    PRIMARY KEY (student_id, class_id),  -- 複合主キー
+    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+    FOREIGN KEY (class_id) REFERENCES classes(class_id) ON DELETE CASCADE
+);
+```
+
+3. **学生の時間重複防止**：
+
+```sql
+-- 学生の時間割重複チェックビュー
+CREATE VIEW student_time_conflicts AS
+SELECT 
+    e1.student_id,
+    c1.slot_id,
+    c1.academic_year,
+    c1.semester,
+    COUNT(*) as conflict_count
+FROM enrollments e1
+JOIN classes c1 ON e1.class_id = c1.class_id
+GROUP BY e1.student_id, c1.slot_id, c1.academic_year, c1.semester
+HAVING COUNT(*) > 1;
+
+-- 履修登録時のチェック用プロシージャ
+DELIMITER //
+CREATE PROCEDURE check_enrollment_conflict(
+    IN p_student_id BIGINT,
+    IN p_class_id BIGINT
+)
+BEGIN
+    DECLARE v_conflict_count INT DEFAULT 0;
+    
+    SELECT COUNT(*) INTO v_conflict_count
+    FROM enrollments e
+    JOIN classes c1 ON e.class_id = c1.class_id
+    JOIN classes c2 ON p_class_id = c2.class_id
+    WHERE e.student_id = p_student_id
+    AND c1.slot_id = c2.slot_id
+    AND c1.academic_year = c2.academic_year
+    AND c1.semester = c2.semester;
+    
+    IF v_conflict_count > 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Time slot conflict detected';
+    END IF;
+END //
+DELIMITER ;
+```
+
+4. **テストデータと検証**：
+
+```sql
+-- テストデータの投入
+INSERT INTO subjects VALUES ('CS101', 'プログラミング基礎', 2);
+INSERT INTO instructors VALUES (1, '佐藤先生', 'コンピュータ科学');
+INSERT INTO classrooms VALUES ('A101', 'コンピュータ室1', 30);
+INSERT INTO time_slots VALUES (1, 'Monday', 1, '09:00', '10:30');
+INSERT INTO time_slots VALUES (2, 'Monday', 2, '10:40', '12:10');
+INSERT INTO students VALUES (1, '田中太郎', 'S2025001');
+
+-- 授業の作成
+INSERT INTO classes VALUES (1, 'CS101', 1, 'A101', 1, 2025, 'spring');
+
+-- 制約違反のテスト
+-- 同じ教室・時間に別の授業を作ろうとする（エラーが発生すべき）
+INSERT INTO classes VALUES (2, 'CS101', 1, 'A101', 1, 2025, 'spring');
+
+-- 履修登録
+INSERT INTO enrollments VALUES (1, 1);
+```
+
+### 解答44-5
+
+1. **現在の設計の問題点**：
+   - **非正規化**：学生情報、講座情報、教師情報が重複格納
+   - **主キーの不適切性**：id は業務的意味がない単純な連番
+   - **一意性制約の欠如**：同じ学生の同じ講座の同じ種別で複数レコード可能
+   - **外部キー制約なし**：データ整合性が保証されない
+   - **更新・削除異常**：学生名や講座名変更時の不整合リスク
+   - **検索効率の悪さ**：適切なインデックスがない
+   - **データ型の不整合**：学生IDや講座IDが文字列として格納
+
+2. **改善されたテーブル構造**：
+
+```sql
+-- 学生テーブル
+CREATE TABLE students (
+    student_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    student_name VARCHAR(100) NOT NULL,
+    student_email VARCHAR(150) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 教師テーブル
+CREATE TABLE teachers (
+    teacher_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    teacher_name VARCHAR(100) NOT NULL,
+    department VARCHAR(64),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 講座テーブル
+CREATE TABLE courses (
+    course_id VARCHAR(16) PRIMARY KEY,
+    course_name VARCHAR(200) NOT NULL,
+    teacher_id BIGINT NOT NULL,
+    credits INT DEFAULT 1,
+    
+    FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id)
+);
+
+-- 履修テーブル
+CREATE TABLE enrollments (
+    student_id BIGINT,
+    course_id VARCHAR(16),
+    enrollment_date DATE DEFAULT CURRENT_DATE,
+    
+    PRIMARY KEY (student_id, course_id),
+    FOREIGN KEY (student_id) REFERENCES students(student_id),
+    FOREIGN KEY (course_id) REFERENCES courses(course_id)
+);
+
+-- 成績テーブル
+CREATE TABLE grades (
+    student_id BIGINT,
+    course_id VARCHAR(16),
+    grade_type VARCHAR(50),
+    score DECIMAL(5,2) NOT NULL,
+    submission_date DATE DEFAULT CURRENT_DATE,
+    
+    PRIMARY KEY (student_id, course_id, grade_type),
+    FOREIGN KEY (student_id, course_id) REFERENCES enrollments(student_id, course_id) ON DELETE CASCADE,
+    
+    INDEX idx_submission_date (submission_date)
+);
+```
+
+3. **データ移行SQL**：
+
+```sql
+-- 一時テーブルでデータを整理
+CREATE TEMPORARY TABLE temp_migration AS
+SELECT DISTINCT
+    student_name,
+    student_email,
+    course_name,
+    teacher_name
+FROM student_grades;
+
+-- 教師データの移行
+INSERT INTO teachers (teacher_name)
+SELECT DISTINCT teacher_name 
+FROM temp_migration;
+
+-- 学生データの移行
+INSERT INTO students (student_name, student_email)
+SELECT DISTINCT student_name, student_email
+FROM temp_migration;
+
+-- 講座データの移行
+INSERT INTO courses (course_id, course_name, teacher_id)
+SELECT 
+    CONCAT('C', LPAD(ROW_NUMBER() OVER (ORDER BY tm.course_name), 3, '0')) as course_id,
+    tm.course_name,
+    t.teacher_id
+FROM (SELECT DISTINCT course_name, teacher_name FROM temp_migration) tm
+JOIN teachers t ON tm.teacher_name = t.teacher_name;
+
+-- 履修データの移行
+INSERT INTO enrollments (student_id, course_id)
+SELECT DISTINCT s.student_id, c.course_id
+FROM student_grades sg
+JOIN students s ON sg.student_name = s.student_name AND sg.student_email = s.student_email
+JOIN courses c ON sg.course_name = c.course_name
+JOIN teachers t ON sg.teacher_name = t.teacher_name AND c.teacher_id = t.teacher_id;
+
+-- 成績データの移行
+INSERT INTO grades (student_id, course_id, grade_type, score, submission_date)
+SELECT 
+    s.student_id,
+    c.course_id,
+    sg.grade_type,
+    sg.score,
+    sg.submission_date
+FROM student_grades sg
+JOIN students s ON sg.student_name = s.student_name AND sg.student_email = s.student_email
+JOIN courses c ON sg.course_name = c.course_name
+JOIN teachers t ON sg.teacher_name = t.teacher_name AND c.teacher_id = t.teacher_id;
+```
+
+4. **改善後のクエリ**：
+
+```sql
+-- 改善後：学生の成績を取得
+SELECT 
+    s.student_name,
+    c.course_name,
+    t.teacher_name,
+    g.grade_type,
+    g.score,
+    g.submission_date
+FROM students s
+JOIN grades g ON s.student_id = g.student_id
+JOIN courses c ON g.course_id = c.course_id
+JOIN teachers t ON c.teacher_id = t.teacher_id
+WHERE s.student_name = '田中太郎'
+ORDER BY g.submission_date DESC;
+
+-- 特定講座の全学生成績
+SELECT 
+    s.student_name,
+    g.grade_type,
+    g.score,
+    g.submission_date
+FROM grades g
+JOIN students s ON g.student_id = s.student_id
+JOIN courses c ON g.course_id = c.course_id
+WHERE c.course_name = 'プログラミング基礎'
+ORDER BY s.student_name, g.grade_type;
+```
+
+### 解答44-6
+
+1. **必要なテーブル**：
+
+```sql
+-- 顧客テーブル
+CREATE TABLE customers (
+    customer_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    customer_uuid CHAR(36) UNIQUE NOT NULL,  -- 外部連携用
+    email VARCHAR(150) UNIQUE NOT NULL,
+    customer_name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    INDEX idx_email (email),
+    INDEX idx_uuid (customer_uuid)
+);
+
+-- 顧客住所テーブル
+CREATE TABLE customer_addresses (
+    address_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    customer_id BIGINT NOT NULL,
+    address_type ENUM('billing', 'shipping', 'both') DEFAULT 'shipping',
+    address_name VARCHAR(50),  -- 「自宅」「会社」など
+    postal_code VARCHAR(10),
+    address_line1 VARCHAR(200) NOT NULL,
+    address_line2 VARCHAR(200),
+    city VARCHAR(50) NOT NULL,
+    state VARCHAR(50),
+    country VARCHAR(50) DEFAULT 'Japan',
+    is_default BOOLEAN DEFAULT FALSE,
+    
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE,
+    INDEX idx_customer_type (customer_id, address_type)
+);
+
+-- カテゴリテーブル
+CREATE TABLE categories (
+    category_id INT AUTO_INCREMENT PRIMARY KEY,
+    category_name VARCHAR(100) NOT NULL,
+    parent_category_id INT,
+    
+    FOREIGN KEY (parent_category_id) REFERENCES categories(category_id),
+    INDEX idx_parent (parent_category_id)
+);
+
+-- 商品テーブル
+CREATE TABLE products (
+    product_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    sku_code VARCHAR(50) UNIQUE NOT NULL,  -- 外部システム連携用
+    product_name VARCHAR(200) NOT NULL,
+    category_id INT NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    description TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (category_id) REFERENCES categories(category_id),
+    INDEX idx_sku (sku_code),
+    INDEX idx_category_active (category_id, is_active),
+    INDEX idx_price (price)
+);
+
+-- 在庫テーブル
+CREATE TABLE inventory (
+    product_id BIGINT PRIMARY KEY,
+    quantity INT DEFAULT 0,
+    reserved_quantity INT DEFAULT 0,  -- 注文済み未出荷分
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE
+);
+
+-- 支払い方法テーブル
+CREATE TABLE payment_methods (
+    payment_method_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    customer_id BIGINT NOT NULL,
+    method_type ENUM('credit_card', 'bank_transfer', 'paypal', 'cash_on_delivery') NOT NULL,
+    method_name VARCHAR(50),  -- 「メインのカード」など
+    is_default BOOLEAN DEFAULT FALSE,
+    external_id VARCHAR(100),  -- 外部決済システムのID
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE,
+    INDEX idx_customer_default (customer_id, is_default)
+);
+
+-- 注文テーブル
+CREATE TABLE orders (
+    order_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_number VARCHAR(32) UNIQUE NOT NULL,  -- 注文番号（顧客向け）
+    customer_id BIGINT NOT NULL,
+    shipping_address_id BIGINT NOT NULL,
+    payment_method_id BIGINT NOT NULL,
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('pending', 'confirmed', 'shipped', 'delivered', 'cancelled') DEFAULT 'pending',
+    subtotal DECIMAL(12,2) NOT NULL,
+    tax_amount DECIMAL(10,2) DEFAULT 0,
+    shipping_fee DECIMAL(8,2) DEFAULT 0,
+    total_amount DECIMAL(12,2) NOT NULL,
+    
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+    FOREIGN KEY (shipping_address_id) REFERENCES customer_addresses(address_id),
+    FOREIGN KEY (payment_method_id) REFERENCES payment_methods(payment_method_id),
+    
+    INDEX idx_customer_date (customer_id, order_date),
+    INDEX idx_order_number (order_number),
+    INDEX idx_status_date (status, order_date)
+);
+
+-- 注文詳細テーブル
+CREATE TABLE order_items (
+    order_id BIGINT,
+    product_id BIGINT,
+    quantity INT NOT NULL,
+    unit_price DECIMAL(10,2) NOT NULL,  -- 注文時の価格を保存
+    total_price DECIMAL(12,2) NOT NULL,
+    
+    PRIMARY KEY (order_id, product_id),
+    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(product_id)
+);
+
+-- レビューテーブル
+CREATE TABLE product_reviews (
+    review_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    product_id BIGINT NOT NULL,
+    customer_id BIGINT NOT NULL,
+    order_id BIGINT,  -- 購入履歴との紐付け
+    rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    title VARCHAR(100),
+    comment TEXT,
+    is_verified_purchase BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (product_id) REFERENCES products(product_id),
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+    FOREIGN KEY (order_id) REFERENCES orders(order_id),
+    
+    UNIQUE KEY uk_customer_product_order (customer_id, product_id, order_id),
+    INDEX idx_product_rating (product_id, rating),
+    INDEX idx_created_at (created_at)
+);
+```
