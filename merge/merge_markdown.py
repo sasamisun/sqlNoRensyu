@@ -1,136 +1,203 @@
-import os
-import re
-from pathlib import Path
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-def merge_markdown_files(input_folder, output_file):
+"""
+MDファイルマージツール
+
+【概要】
+フォルダ内のmdファイルを、ファイル名の最初の2文字でグループ化してマージするツールです。
+ファイル数が多い場合に、効率的に整理できます。
+
+【使用方法】
+1. 対話型実行:
+   python md_merger.py
+   
+   実行すると以下の入力を求められます：
+   - 入力フォルダのパス (Enter: カレントフォルダ)
+   - 出力フォルダのパス (Enter: ./output)
+
+2. 関数として使用:
+   from md_merger import merge_md_files
+   
+   # 基本的な使用
+   merge_md_files("./markdown_files")
+   
+   # 出力フォルダを指定
+   merge_md_files("./input_folder", "./output_folder")
+
+【例】
+以下のファイルがある場合：
+- 01_intro.md
+- 01_basic.md
+- 02_advanced.md
+- 02_tips.md
+- 03_summary.md
+
+結果：
+- 01_merged.md (01_intro.md と 01_basic.md をマージ)
+- 02_merged.md (02_advanced.md と 02_tips.md をマージ)
+- 03_summary.md はスキップ (1ファイルのみ)
+
+【デフォルト値】
+- 入力フォルダ: . (カレントフォルダ)
+- 出力フォルダ: ./output
+
+【出力ファイル形式】
+マージされたファイルには以下が含まれます：
+- グループのヘッダー
+- マージされたファイルのリスト
+- 各ファイルの内容（ファイル名付きのセクションとして）
+"""
+
+import os
+import glob
+from pathlib import Path
+from collections import defaultdict
+
+def merge_md_files(input_folder, output_folder=None):
     """
-    指定したフォルダ内のMarkdownファイルを一つのファイルにマージします
+    指定されたフォルダ内のmdファイルを、ファイル名の最初の2文字でグループ化してマージする
     
     Args:
         input_folder (str): 入力フォルダのパス
-        output_file (str): 出力ファイルのパス
+        output_folder (str): 出力フォルダのパス（Noneの場合は入力フォルダと同じ）
     """
     
-    # 入力フォルダが存在するかチェック
-    if not os.path.exists(input_folder):
-        print(f"エラー: フォルダ '{input_folder}' が見つかりません。")
-        return
+    # パスの設定
+    input_path = Path(input_folder)
+    if output_folder is None:
+        output_path = input_path
+    else:
+        output_path = Path(output_folder)
+        output_path.mkdir(parents=True, exist_ok=True)
     
-    # Markdownファイルを取得
-    md_files = []
-    for file in os.listdir(input_folder):
-        if file.endswith('.md'):
-            md_files.append(file)
+    # mdファイルの検索
+    md_files = list(input_path.glob("*.md"))
     
     if not md_files:
-        print(f"フォルダ '{input_folder}' にMarkdownファイルが見つかりません。")
+        print(f"エラー: {input_folder} にmdファイルが見つかりません")
         return
     
-    # ファイル名でソート（番号順になるように）
-    md_files.sort()
+    print(f"見つかったmdファイル数: {len(md_files)}")
     
-    print(f"見つかったMarkdownファイル: {len(md_files)}個")
-    for file in md_files:
-        print(f"  - {file}")
+    # ファイル名順にソート
+    md_files.sort(key=lambda x: x.name)
     
-    # マージ処理
-    merged_content = []
-    toc_entries = []  # 目次用
+    # 最初の2文字でグループ化
+    groups = defaultdict(list)
+    for file_path in md_files:
+        file_name = file_path.name
+        # 拡張子を除いたファイル名の最初の2文字を取得
+        base_name = file_path.stem
+        if len(base_name) >= 2:
+            prefix = base_name[:2]
+        else:
+            prefix = base_name  # 1文字の場合はそのまま使用
+        
+        groups[prefix].append(file_path)
     
-    # タイトルとイントロダクション
-    merged_content.append("# SQL学習テキスト 完全版")
-    merged_content.append("")
-    merged_content.append("このテキストは、SQLの基礎から応用まで体系的に学習できるように構成されています。")
-    merged_content.append("学校データベースを使った実践的な例題と練習問題を通じて、実務で使えるSQLスキルを身につけることができます。")
-    merged_content.append("")
-    merged_content.append("---")
-    merged_content.append("")
+    print(f"グループ数: {len(groups)}")
     
-    # 各ファイルを処理
-    for i, filename in enumerate(md_files, 1):
-        file_path = os.path.join(input_folder, filename)
+    # 各グループをマージ
+    for prefix, files in groups.items():
+        if len(files) == 1:
+            print(f"グループ '{prefix}': 1ファイルのみのためスキップ - {files[0].name}")
+            continue
         
-        print(f"処理中: {filename}")
+        print(f"グループ '{prefix}': {len(files)}ファイルをマージ中...")
         
-        with open(file_path, 'r', encoding='utf-8') as file:
-            content = file.read()
+        # マージ後のファイル名
+        output_file = output_path / f"{prefix}_merged.md"
         
-        # ファイルの最初の見出し（章タイトル）を取得
-        lines = content.split('\n')
-        chapter_title = ""
-        for line in lines:
-            if line.startswith('# '):
-                chapter_title = line[2:].strip()
-                break
-        
-        if chapter_title:
-            toc_entries.append(f"{i}. [{chapter_title}](#{create_anchor(chapter_title)})")
-        
-        # 各章の間にページ区切りを追加
-        if i > 1:
-            merged_content.append("")
-            merged_content.append("---")
-            merged_content.append("")
-        
-        # ファイル内容を追加
-        merged_content.append(content)
-        merged_content.append("")
+        try:
+            with open(output_file, 'w', encoding='utf-8') as outf:
+                # ヘッダーを追加
+                outf.write(f"# {prefix} - マージされたファイル\n\n")
+                outf.write(f"以下のファイルがマージされています:\n")
+                for file_path in files:
+                    outf.write(f"- {file_path.name}\n")
+                outf.write("\n" + "="*80 + "\n\n")
+                
+                # 各ファイルの内容を追加
+                for i, file_path in enumerate(files):
+                    print(f"  - {file_path.name} を処理中...")
+                    
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as inf:
+                            content = inf.read().strip()
+                        
+                        # ファイル区切りヘッダーを追加
+                        outf.write(f"## ファイル {i+1}: {file_path.name}\n\n")
+                        outf.write(content)
+                        outf.write("\n\n" + "-"*60 + "\n\n")
+                        
+                    except UnicodeDecodeError:
+                        print(f"    警告: {file_path.name} の文字エンコーディングに問題があります")
+                        try:
+                            with open(file_path, 'r', encoding='shift_jis') as inf:
+                                content = inf.read().strip()
+                            outf.write(f"## ファイル {i+1}: {file_path.name}\n\n")
+                            outf.write(content)
+                            outf.write("\n\n" + "-"*60 + "\n\n")
+                        except Exception as e:
+                            print(f"    エラー: {file_path.name} を読み込めませんでした - {e}")
+                            outf.write(f"## ファイル {i+1}: {file_path.name}\n\n")
+                            outf.write(f"**エラー: ファイルを読み込めませんでした ({e})**\n\n")
+                            outf.write("-"*60 + "\n\n")
+                    
+                    except Exception as e:
+                        print(f"    エラー: {file_path.name} の処理中にエラーが発生しました - {e}")
+                        outf.write(f"## ファイル {i+1}: {file_path.name}\n\n")
+                        outf.write(f"**エラー: ファイルの処理中にエラーが発生しました ({e})**\n\n")
+                        outf.write("-"*60 + "\n\n")
+            
+            print(f"  完了: {output_file}")
+            
+        except Exception as e:
+            print(f"エラー: グループ '{prefix}' のマージ中にエラーが発生しました - {e}")
     
-    # 目次を作成して先頭に挿入
-    toc_content = ["## 目次", ""]
-    toc_content.extend(toc_entries)
-    toc_content.extend(["", "---", ""])
-    
-    # 目次をメインコンテンツの前に挿入
-    final_content = merged_content[:6] + toc_content + merged_content[6:]
-    
-    # ファイルに書き出し
-    try:
-        with open(output_file, 'w', encoding='utf-8') as file:
-            file.write('\n'.join(final_content))
-        
-        print(f"\n✅ マージ完了!")
-        print(f"📄 出力ファイル: {output_file}")
-        print(f"📊 マージしたファイル数: {len(md_files)}個")
-        print(f"📏 総行数: {len(final_content)}行")
-        
-    except Exception as e:
-        print(f"❌ ファイル書き出しエラー: {e}")
-
-def create_anchor(title):
-    """
-    章タイトルからMarkdownアンカーリンクを作成
-    """
-    # 日本語や記号を含むタイトルに対応
-    anchor = title.lower()
-    anchor = re.sub(r'[^\w\s-]', '', anchor)  # 特殊文字を除去
-    anchor = re.sub(r'[-\s]+', '-', anchor)   # スペースとハイフンを正規化
-    return anchor.strip('-')
+    print("\nマージ処理が完了しました")
 
 def main():
-    """
-    メイン実行関数
-    """
-    print("=" * 50)
-    print("📚 Markdownファイル マージツール")
-    print("=" * 50)
-    
-    # デフォルト設定
-    default_input = "."  # カレントフォルダ
-    default_output = "SQL学習テキスト_完全版.md"
+    """メイン関数"""
+    print("=== MDファイルマージツール ===")
+    print("ファイル名の最初の2文字が同じmdファイルをグループ化してマージします\n")
     
     # 入力フォルダの指定
-    input_folder = input(f"入力フォルダ名 (デフォルト: {default_input}): ").strip()
-    if not input_folder:
-        input_folder = default_input
+    while True:
+        input_folder = input("入力フォルダのパス（Enter: カレントフォルダ）: ").strip()
+        if not input_folder:
+            input_folder = "."  # デフォルト: カレントフォルダ
+        
+        input_path = Path(input_folder)
+        if not input_path.exists():
+            print(f"エラー: フォルダ '{input_folder}' が存在しません")
+            continue
+        
+        if not input_path.is_dir():
+            print(f"エラー: '{input_folder}' はフォルダではありません")
+            continue
+        
+        break
     
-    # 出力ファイル名の指定
-    output_file = input(f"出力ファイル名 (デフォルト: {default_output}): ").strip()
-    if not output_file:
-        output_file = default_output
+    # 出力フォルダの指定（オプション）
+    output_folder = input("出力フォルダのパス（Enter: ./output）: ").strip()
+    if not output_folder:
+        output_folder = "./output"  # デフォルト: ./output
+    
+    # 確認
+    print(f"\n設定:")
+    print(f"  入力フォルダ: {input_folder}")
+    print(f"  出力フォルダ: {output_folder}")
+    
+    confirm = input("\n実行しますか？ (y/N): ").strip().lower()
+    if confirm not in ['y', 'yes']:
+        print("キャンセルしました")
+        return
     
     # マージ実行
-    merge_markdown_files(input_folder, output_file)
+    print("\nマージを開始します...")
+    merge_md_files(input_folder, output_folder)
 
 if __name__ == "__main__":
     main()
